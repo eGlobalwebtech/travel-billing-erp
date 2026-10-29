@@ -1385,6 +1385,127 @@ app.get('/api/supplier-bills', async (req, res) => {
   }
 });
 
+// -------------------------------------------------------------
+// 14. AUTHENTICATION & RBAC (USER MANAGEMENT)
+// -------------------------------------------------------------
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const user = await db.prepare(
+      'SELECT * FROM users WHERE LOWER(email) = LOWER(?) AND is_active = 1'
+    ).get(email.trim());
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or user account is disabled' });
+    }
+
+    if (user.password !== password.trim()) {
+      return res.status(401).json({ error: 'Incorrect password' });
+    }
+
+    // Return safe user payload (omit password)
+    const { password: _, ...safeUser } = user;
+    res.json({
+      success: true,
+      user: safeUser,
+      message: `Welcome back, ${safeUser.name}!`
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/users', async (req, res) => {
+  try {
+    const users = await db.prepare(
+      'SELECT id, name, email, role, phone, avatar, is_active, created_at FROM users ORDER BY created_at ASC'
+    ).all();
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/users', async (req, res) => {
+  try {
+    const { name, email, password, role = 'sales', phone = '', avatar = '' } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required' });
+    }
+
+    const existing = await db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(email.trim());
+    if (existing) {
+      return res.status(400).json({ error: 'A user with this email already exists' });
+    }
+
+    const userId = await generateId('USR', 'users');
+    await db.prepare(`
+      INSERT INTO users (id, name, email, password, role, phone, avatar, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+    `).run(userId, name.trim(), email.trim().toLowerCase(), password.trim(), role, phone, avatar);
+
+    res.json({
+      success: true,
+      userId,
+      message: `User ${name} created successfully with role ${role}!`
+    });
+  } catch (err) {
+    console.error('Create user error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, role, phone, password, is_active } = req.body;
+
+    const existing = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ error: 'User not found' });
+
+    let updateQuery = 'UPDATE users SET name = ?, email = ?, role = ?, phone = ?, is_active = ?';
+    const params = [
+      name || existing.name,
+      email ? email.trim().toLowerCase() : existing.email,
+      role || existing.role,
+      phone !== undefined ? phone : existing.phone,
+      is_active !== undefined ? (is_active ? 1 : 0) : existing.is_active
+    ];
+
+    if (password && password.trim()) {
+      updateQuery += ', password = ?';
+      params.push(password.trim());
+    }
+
+    updateQuery += ' WHERE id = ?';
+    params.push(id);
+
+    await db.prepare(updateQuery).run(...params);
+    res.json({ success: true, message: 'User updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Don't delete Super Admin with id USR-001
+    if (id === 'USR-001') {
+      return res.status(400).json({ error: 'Default Super Admin account cannot be deleted' });
+    }
+    await db.prepare('UPDATE users SET is_active = 0 WHERE id = ?').run(id);
+    res.json({ success: true, message: 'User deactivated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Serve static client bundle if built
 const clientDist = path.join(__dirname, '../client/dist');
 if (fs.existsSync(clientDist)) {

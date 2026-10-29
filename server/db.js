@@ -169,6 +169,16 @@ export async function initDatabase() {
     }
   }
 
+  // Ensure default users exist for RBAC login
+  try {
+    const userCountRes = await pool.query('SELECT COUNT(*) as count FROM users');
+    if (parseInt(userCountRes.rows[0].count, 10) === 0) {
+      await seedDefaults();
+    }
+  } catch (uErr) {
+    console.warn('[SERVER] User seed check:', uErr.message);
+  }
+
   console.log('[SERVER] PostgreSQL Travel ERP Database initialized and ready!');
 }
 

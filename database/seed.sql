@@ -91,3 +91,11 @@ INSERT INTO expenses (id, expense_number, expense_date, category, amount, paymen
 ('EXP-2026-005', 'EXP-2026-005', '2026-10-14', 'Office Tea & Misc', 1850.00, 'Cash', 'ACC-01', 'Local Market & Pantry Vendor', 'CASH-VOUCHER-01', 1, 'Client refreshments, tea & snacks')
 ON CONFLICT (id) DO NOTHING;
 
+-- 8. Users & Role-Based Access Control (RBAC)
+INSERT INTO users (id, name, email, password, role, phone, avatar, is_active) VALUES
+('USR-001', 'Ramesh Chandra (Owner)', 'admin@nilkanthtourism.com', 'Admin@123', 'super_admin', '+91 75750 99090', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120', 1),
+('USR-002', 'Vikas Patel (Operations)', 'manager@nilkanthtourism.com', 'Manager@123', 'manager', '+91 98250 11223', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120', 1),
+('USR-003', 'Anita Desai (Finance)', 'accounts@nilkanthtourism.com', 'Accounts@123', 'accountant', '+91 94260 33445', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120', 1),
+('USR-004', 'Rahul Sharma (Sales)', 'sales@nilkanthtourism.com', 'Sales@123', 'sales', '+91 99090 55667', 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120', 1)
+ON CONFLICT (id) DO NOTHING;
+
