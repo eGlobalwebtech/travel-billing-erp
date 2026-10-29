@@ -126,7 +126,7 @@ export default function ReportsView() {
       {reportType === 'pnl' && data && (
         <div>
           {/* High-level KPI Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+          <div className="reports-kpi-grid">
             <div className="panel" style={{ margin: 0, padding: '20px' }}>
               <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Total Billed Revenue</div>
               <div style={{ fontSize: '24px', fontWeight: 800, color: '#0f172a', marginTop: '4px' }}>
@@ -219,7 +219,7 @@ export default function ReportsView() {
       {reportType === 'ageing' && data && (
         <div>
           {/* Summary Buckets */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '14px', marginBottom: '24px' }}>
+          <div className="reports-ageing-grid">
             <div className="panel" style={{ margin: 0, padding: '16px' }}>
               <div style={{ fontSize: '11px', color: '#059669', fontWeight: 700 }}>Current (Not Overdue)</div>
               <div style={{ fontSize: '20px', fontWeight: 800, color: '#059669', marginTop: '4px' }}>

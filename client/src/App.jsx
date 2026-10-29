@@ -4,7 +4,8 @@ import {
   LayoutDashboard, Plane, Package, Building, Users, Building2, 
   ArrowDownLeft, ArrowUpRight, DollarSign, Bell, Sparkles, FileText, 
   Settings as SettingsIcon, Menu, X, Plus, CreditCard, ShieldCheck, 
-  LogOut, UserCircle, ChevronDown, Check, Home
+  LogOut, UserCircle, ChevronDown, Check, Home, Sun, Moon,
+  PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 
 import Dashboard from './components/Dashboard';
@@ -42,6 +43,29 @@ export default function App() {
   // Responsive mobile menu state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
+  // Desktop sidebar collapse / full screen state
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Light / Dark mode state
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem('travel_erp_theme') || 'light';
+    } catch (e) {
+      return 'light';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('travel_erp_theme', theme);
+    } catch (e) {}
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+  };
 
   // Global modals
   const [isNewBookingModalOpen, setIsNewBookingModalOpen] = useState(false);
@@ -175,7 +199,7 @@ export default function App() {
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       {/* Mobile Drawer Backdrop */}
       {isMobileMenuOpen && (
         <div 
@@ -185,7 +209,7 @@ export default function App() {
       )}
 
       {/* Sidebar Navigation */}
-      <aside className={`sidebar ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
+      <aside className={`sidebar ${isMobileMenuOpen ? 'mobile-open' : ''} ${isSidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
           <img 
             src="https://nilkanthtourism.com/wp-content/uploads/2025/03/logo-Photoroom.png" 
@@ -268,10 +292,11 @@ export default function App() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="main-content">
+      <main className={`main-content ${isSidebarCollapsed ? 'expanded' : ''}`}>
         {/* Topbar */}
         <header className="topbar">
           <div className="topbar-left">
+            {/* Mobile Hamburger Menu Toggle */}
             <button 
               className="mobile-hamburger-btn" 
               onClick={() => setIsMobileMenuOpen(true)}
@@ -280,12 +305,32 @@ export default function App() {
               <Menu size={22} />
             </button>
 
+            {/* Desktop Fullscreen / Collapse Sidebar Toggle */}
+            <button 
+              className="desktop-sidebar-toggle-btn"
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              title={isSidebarCollapsed ? "Show Sidebar" : "Hide Sidebar (Full Screen Mode)"}
+              aria-label="Toggle sidebar collapse"
+            >
+              {isSidebarCollapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
+            </button>
+
             <h1 className="topbar-title">
               {currentTab === 'settings' ? 'Agency Settings' : (allNavItems.find(i => i.id === currentTab)?.label || 'Workspace')}
             </h1>
           </div>
 
           <div className="topbar-right">
+            {/* Light / Dark Mode Toggle */}
+            <button 
+              className="theme-toggle-btn"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              aria-label="Toggle theme mode"
+            >
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
             {/* Agency Info (visible on larger screens) */}
             <div className="topbar-agency-info">
               <span className="agency-name">

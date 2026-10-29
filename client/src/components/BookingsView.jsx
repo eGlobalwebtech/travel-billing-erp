@@ -288,7 +288,7 @@ export default function BookingsView({
             {/* Modal Body */}
             <div className="modal-body" style={{ padding: '20px 24px' }}>
               {/* Top Summary Bar */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+              <div className="booking-detail-summary-grid">
                 <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                   <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Customer</div>
                   <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '15px' }}>{bookingDetail.booking.customer_name}</div>
@@ -682,7 +682,7 @@ export default function BookingsView({
                         </div>
                         <span style={{ background: '#d1fae5', color: '#065f46', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 700 }}>CONFIRMED</span>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginTop: '12px' }}>
+                      <div className="hotel-voucher-grid">
                         <div><div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Check-In</div><div style={{ fontWeight: 700 }}>{formatDate(h.check_in)}</div></div>
                         <div><div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Check-Out</div><div style={{ fontWeight: 700 }}>{formatDate(h.check_out)}</div></div>
                         <div><div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Duration</div><div style={{ fontWeight: 700 }}>{h.nights} Night{h.nights > 1 ? 's' : ''}</div></div>

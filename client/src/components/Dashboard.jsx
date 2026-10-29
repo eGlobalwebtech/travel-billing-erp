@@ -120,7 +120,7 @@ export default function Dashboard({
               <TrendingUp size={18} />
             </div>
           </div>
-          <div className="kpi-amount" style={{ color: '#0f172a' }}>{formatINR(kpis.totalInvoicedSales)}</div>
+          <div className="kpi-amount">{formatINR(kpis.totalInvoicedSales)}</div>
           <div className="kpi-subtext">
             <span>GST compliant billed value</span>
           </div>
@@ -193,7 +193,7 @@ export default function Dashboard({
               <DollarSign size={18} />
             </div>
           </div>
-          <div className="kpi-amount" style={{ color: '#475569' }}>{formatINR(kpis.totalExpenses)}</div>
+          <div className="kpi-amount">{formatINR(kpis.totalExpenses)}</div>
           <div className="kpi-subtext">
             <span>Office rent, salaries &amp; marketing</span>
           </div>
@@ -204,7 +204,6 @@ export default function Dashboard({
           className="kpi-card"
           onClick={() => onNavigate('reports', 'cashbook')}
           title="Click to view Cash Book & Bank Ledger"
-          style={{ background: '#f8fafc' }}
         >
           <div className="kpi-header">
             <span className="kpi-title">Liquid Cash &amp; Bank</span>
@@ -223,7 +222,6 @@ export default function Dashboard({
           className="kpi-card"
           onClick={() => onNavigate('reports', 'profitability')}
           title="Click to view Trip Profitability Analysis"
-          style={{ background: 'linear-gradient(135deg, #ffffff, #f0fdf4)' }}
         >
           <div className="kpi-header">
             <span className="kpi-title">Gross Tour Margin</span>
@@ -399,33 +397,33 @@ export default function Dashboard({
                     style={{
                       padding: '12px 14px',
                       borderRadius: '10px',
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border-light)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease'
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.borderColor = '#3b82f6'}
-                    onMouseLeave={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
+                    onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--color-primary-light)'}
+                    onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-light)'}
                   >
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>
+                        <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-main)' }}>
                           {trip.destination}
                         </span>
                         <span className={`badge badge-${trip.status.toLowerCase().replace(' ', '')}`}>
                           {trip.status}
                         </span>
                       </div>
-                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
                         {trip.customer_name} • {trip.pax_adults} Adults {trip.pax_children > 0 ? `+ ${trip.pax_children} Kids` : ''} • {formatDate(trip.start_date)} to {formatDate(trip.end_date)}
                       </div>
                     </div>
 
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 800, fontSize: '14.5px', color: '#0f172a' }}>
+                      <div style={{ fontWeight: 800, fontSize: '14.5px', color: 'var(--text-main)' }}>
                         {formatINR(trip.gross_total)}
                       </div>
                       <div style={{ fontSize: '11px', color: '#059669', fontWeight: 600 }}>

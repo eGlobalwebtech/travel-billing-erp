@@ -215,7 +215,7 @@ export default function NewBookingModal({ isOpen, onClose, onSuccess }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-card-large" onClick={e => e.stopPropagation()} style={{ maxWidth: '960px' }}>
+      <div className="modal-card modal-card-large" onClick={e => e.stopPropagation()}>
 
         <div className="modal-header">
           <div>
@@ -374,7 +374,7 @@ export default function NewBookingModal({ isOpen, onClose, onSuccess }) {
                       Remove
                     </button>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 70px 70px 90px', gap: '8px', alignItems: 'end' }}>
+                  <div className="hotel-line-grid">
                     <div>
                       <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>Hotel Name</label>
                       <select className="form-select" style={{ fontSize: '12px' }} value={hotel.hotelId} onChange={e => handleHotelChange(idx, 'hotelId', e.target.value)}>
@@ -433,7 +433,7 @@ export default function NewBookingModal({ isOpen, onClose, onSuccess }) {
                       Remove
                     </button>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '8px' }}>
+                  <div className="service-line-grid">
                     <div>
                       <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>Description</label>
                       <input className="form-input" style={{ fontSize: '12px' }} placeholder="e.g. Private AC cab for 6 days" value={svc.description} onChange={e => handleServiceChange(idx, 'description', e.target.value)} />
@@ -484,7 +484,7 @@ export default function NewBookingModal({ isOpen, onClose, onSuccess }) {
                   <input className="form-input" placeholder="Special instructions..." value={customerNotes} onChange={e => setCustomerNotes(e.target.value)} />
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', background: '#fff', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <div className="booking-summary-grid">
                 <div>
                   <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Subtotal</div>
                   <div style={{ fontSize: '16px', fontWeight: 800 }}>{formatINR(baseSelling)}</div>
