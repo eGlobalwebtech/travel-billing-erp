@@ -13,10 +13,13 @@ const __dirname = path.dirname(__filename);
 pg.types.setTypeParser(1700, (val) => (val === null ? null : parseFloat(val)));
 pg.types.setTypeParser(20, (val) => (val === null ? null : parseInt(val, 10)));
 
-const poolConfig = process.env.DATABASE_URL
+const rawDbUrl = (process.env.DATABASE_URL || '').trim();
+const hasValidUrl = rawDbUrl.startsWith('postgresql://') || rawDbUrl.startsWith('postgres://');
+
+const poolConfig = hasValidUrl
   ? {
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }
+      connectionString: rawDbUrl,
+      ssl: rawDbUrl.includes('localhost') || rawDbUrl.includes('127.0.0.1') ? false : { rejectUnauthorized: false }
     }
   : {
       host: process.env.PGHOST || 'localhost',
@@ -25,6 +28,11 @@ const poolConfig = process.env.DATABASE_URL
       user: process.env.PGUSER || 'postgres',
       password: process.env.PGPASSWORD,
     };
+
+const displayTarget = hasValidUrl
+  ? rawDbUrl.replace(/:([^@/]+)@/, ':****@')
+  : `${poolConfig.host}:${poolConfig.port}/${poolConfig.database}`;
+console.log(`[SERVER] Connecting to PostgreSQL at: ${displayTarget}`);
 
 export const pool = new pg.Pool(poolConfig);
 

@@ -16,7 +16,14 @@ app.use(cors());
 app.use(express.json());
 
 // Initialize DB schema & seeds
-await initDatabase();
+try {
+  await initDatabase();
+} catch (dbErr) {
+  console.error('[SERVER] Database connection error:', dbErr.message);
+  console.error('[SERVER] Troubleshooting: Ensure your DATABASE_URL in Render is set to a valid PostgreSQL connection string:');
+  console.error('         postgresql://<user>:<password>@<host>:<port>/<database>');
+  throw dbErr;
+}
 
 // -------------------------------------------------------------
 // HELPER FUNCTIONS
