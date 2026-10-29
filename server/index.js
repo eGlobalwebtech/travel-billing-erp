@@ -16,14 +16,14 @@ app.use(cors());
 app.use(express.json());
 
 // Initialize DB schema & seeds
-initDatabase();
+await initDatabase();
 
 // -------------------------------------------------------------
 // HELPER FUNCTIONS
 // -------------------------------------------------------------
-function generateId(prefix, table, idCol = 'id') {
-  const row = db.prepare(`SELECT count(*) as cnt FROM ${table}`).get();
-  const nextNum = (row.cnt || 0) + 1;
+async function generateId(prefix, table, idCol = 'id') {
+  const row = await db.prepare(`SELECT count(*) as cnt FROM ${table}`).get();
+  const nextNum = parseInt(row?.cnt || 0, 10) + 1;
   const year = new Date().getFullYear();
   return `${prefix}-${year}-${String(nextNum).padStart(4, '0')}`;
 }
@@ -45,10 +45,10 @@ function calculateEndDate(startDateStr, durationDays) {
 // -------------------------------------------------------------
 // 1. DASHBOARD SUMMARY
 // -------------------------------------------------------------
-app.get('/api/dashboard/summary', (req, res) => {
+app.get('/api/dashboard/summary', async (req, res) => {
   try {
     // 1. Total bookings
-    const bookingsStat = db.prepare(`
+    const bookingsStat = await db.prepare(`
       SELECT 
         COUNT(*) as total_bookings,
         COUNT(CASE WHEN status = 'Confirmed' THEN 1 END) as confirmed_bookings,
@@ -61,7 +61,7 @@ app.get('/api/dashboard/summary', (req, res) => {
     `).get();
 
     // 2. Total Invoiced Sales & Balances
-    const invoiceStat = db.prepare(`
+    const invoiceStat = await db.prepare(`
       SELECT 
         COALESCE(SUM(total_amount), 0) as total_invoiced,
         COALESCE(SUM(paid_amount), 0) as total_customer_paid,
@@ -70,13 +70,13 @@ app.get('/api/dashboard/summary', (req, res) => {
     `).get();
 
     // 3. Customer Payments Received (from money_in)
-    const moneyInStat = db.prepare(`
+    const moneyInStat = await db.prepare(`
       SELECT COALESCE(SUM(amount), 0) as total_receipts
       FROM money_in WHERE receipt_type IN ('Customer Payment', 'Customer Advance')
     `).get();
 
     // 4. Supplier Bills & Due
-    const supplierStat = db.prepare(`
+    const supplierStat = await db.prepare(`
       SELECT 
         COALESCE(SUM(total_amount), 0) as total_supplier_bills,
         COALESCE(SUM(paid_amount), 0) as supplier_paid,
@@ -85,38 +85,40 @@ app.get('/api/dashboard/summary', (req, res) => {
     `).get();
 
     // 5. Total Business Operating Expenses
-    const expenseStat = db.prepare(`
+    const expenseStat = await db.prepare(`
       SELECT COALESCE(SUM(amount), 0) as total_expenses FROM expenses
     `).get();
 
     // 6. Cash and Bank Balances
-    const accounts = db.prepare(`SELECT * FROM accounts`).all();
-    const totalLiquidCash = accounts.reduce((sum, a) => sum + (a.current_balance || 0), 0);
+    const accounts = await db.prepare(`SELECT * FROM accounts`).all();
+    const totalLiquidCash = accounts.reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0);
 
     // 7. Reminders (Overdue & Due Soon)
     const todayStr = new Date().toISOString().split('T')[0];
-    const overdueReminders = db.prepare(`
+    const overdueReminders = await db.prepare(`
       SELECT * FROM payment_reminders 
       WHERE status = 'Pending' AND due_date < ?
       ORDER BY due_date ASC LIMIT 5
     `).all(todayStr);
 
-    const upcomingReminders = db.prepare(`
+    const upcomingReminders = await db.prepare(`
       SELECT * FROM payment_reminders 
       WHERE status = 'Pending' AND due_date >= ?
       ORDER BY due_date ASC LIMIT 5
     `).all(todayStr);
 
-    const overdueCount = db.prepare(`
+    const overdueCountRow = await db.prepare(`
       SELECT COUNT(*) as count FROM payment_reminders WHERE status = 'Pending' AND due_date < ?
-    `).get(todayStr).count;
+    `).get(todayStr);
+    const overdueCount = parseInt(overdueCountRow?.count || 0, 10);
 
-    const upcomingCount = db.prepare(`
+    const upcomingCountRow = await db.prepare(`
       SELECT COUNT(*) as count FROM payment_reminders WHERE status = 'Pending' AND due_date >= ?
-    `).get(todayStr).count;
+    `).get(todayStr);
+    const upcomingCount = parseInt(upcomingCountRow?.count || 0, 10);
 
     // 8. Upcoming Trips
-    const upcomingTrips = db.prepare(`
+    const upcomingTrips = await db.prepare(`
       SELECT b.*, c.name as customer_name, c.phone as customer_phone
       FROM bookings b
       JOIN customers c ON b.customer_id = c.id
@@ -125,7 +127,7 @@ app.get('/api/dashboard/summary', (req, res) => {
     `).all(todayStr);
 
     // 9. Recent Transactions
-    const recentMoneyIn = db.prepare(`
+    const recentMoneyIn = await db.prepare(`
       SELECT 'Money In' as tx_type, receipt_number as ref, receipt_date as date, amount, payment_mode, 
              COALESCE(c.name, 'Customer') as party, m.notes as notes
       FROM money_in m
@@ -133,7 +135,7 @@ app.get('/api/dashboard/summary', (req, res) => {
       ORDER BY receipt_date DESC LIMIT 5
     `).all();
 
-    const recentMoneyOut = db.prepare(`
+    const recentMoneyOut = await db.prepare(`
       SELECT 'Money Out' as tx_type, payment_number as ref, payment_date as date, -amount as amount, payment_mode, 
              COALESCE(s.name, 'Supplier') as party, mo.notes as notes
       FROM money_out mo
@@ -141,7 +143,7 @@ app.get('/api/dashboard/summary', (req, res) => {
       ORDER BY payment_date DESC LIMIT 5
     `).all();
 
-    const recentExpenses = db.prepare(`
+    const recentExpenses = await db.prepare(`
       SELECT 'Expense' as tx_type, expense_number as ref, expense_date as date, -amount as amount, payment_mode, 
              category as party, notes
       FROM expenses
@@ -153,14 +155,14 @@ app.get('/api/dashboard/summary', (req, res) => {
       .slice(0, 8);
 
     // Settings
-    const settings = db.prepare('SELECT * FROM company_settings WHERE id = 1').get() || {};
+    const settings = (await db.prepare('SELECT * FROM company_settings WHERE id = 1').get()) || {};
 
     res.json({
       agency: settings,
       kpis: {
-        totalBookings: bookingsStat.total_bookings,
-        confirmedBookings: bookingsStat.confirmed_bookings,
-        ongoingBookings: bookingsStat.ongoing_bookings,
+        totalBookings: Number(bookingsStat.total_bookings),
+        confirmedBookings: Number(bookingsStat.confirmed_bookings),
+        ongoingBookings: Number(bookingsStat.ongoing_bookings),
         totalInvoicedSales: round2(invoiceStat.total_invoiced),
         customerPaymentsReceived: round2(moneyInStat.total_receipts),
         customerOutstanding: round2(invoiceStat.customer_outstanding),
@@ -170,7 +172,7 @@ app.get('/api/dashboard/summary', (req, res) => {
         cashAndBankBalance: round2(totalLiquidCash),
         estimatedProfit: round2(bookingsStat.total_estimated_profit),
         finalProfit: round2(bookingsStat.total_final_profit),
-        netEstimatedGain: round2(bookingsStat.total_estimated_profit - expenseStat.total_expenses)
+        netEstimatedGain: round2(Number(bookingsStat.total_estimated_profit) - Number(expenseStat.total_expenses))
       },
       accounts,
       reminders: {
@@ -191,7 +193,7 @@ app.get('/api/dashboard/summary', (req, res) => {
 // -------------------------------------------------------------
 // 2. BOOKINGS API
 // -------------------------------------------------------------
-app.get('/api/bookings', (req, res) => {
+app.get('/api/bookings', async (req, res) => {
   try {
     const { status, search } = req.query;
     let query = `
@@ -215,17 +217,17 @@ app.get('/api/bookings', (req, res) => {
       params.push(term, term, term, term);
     }
     query += ` ORDER BY b.created_at DESC`;
-    const bookings = db.prepare(query).all(...params);
+    const bookings = await db.prepare(query).all(...params);
     res.json(bookings);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/bookings/:id', (req, res) => {
+app.get('/api/bookings/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const booking = db.prepare(`
+    const booking = await db.prepare(`
       SELECT b.*, c.name as customer_name, c.phone as customer_phone, c.email as customer_email, c.city as customer_city, c.address as customer_address, c.gstin as customer_gstin,
              p.name as package_name, p.inclusions as package_inclusions, p.exclusions as package_exclusions
       FROM bookings b
@@ -236,32 +238,32 @@ app.get('/api/bookings/:id', (req, res) => {
 
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
 
-    const hotels = db.prepare(`
+    const hotels = await db.prepare(`
       SELECT bh.*, s.name as supplier_name, s.phone as supplier_phone
       FROM booking_hotels bh
       LEFT JOIN suppliers s ON bh.supplier_id = s.id
       WHERE bh.booking_id = ?
     `).all(id);
 
-    const services = db.prepare(`
+    const services = await db.prepare(`
       SELECT bs.*, s.name as supplier_name, s.phone as supplier_phone
       FROM booking_services bs
       LEFT JOIN suppliers s ON bs.supplier_id = s.id
       WHERE bs.booking_id = ?
     `).all(id);
 
-    const itinerary = db.prepare(`
+    const itinerary = await db.prepare(`
       SELECT * FROM booking_itinerary WHERE booking_id = ? ORDER BY day_number ASC
     `).all(id);
 
-    const invoices = db.prepare(`SELECT * FROM invoices WHERE booking_id = ?`).all(id);
-    const supplierBills = db.prepare(`
+    const invoices = await db.prepare(`SELECT * FROM invoices WHERE booking_id = ?`).all(id);
+    const supplierBills = await db.prepare(`
       SELECT sb.*, s.name as supplier_name FROM supplier_bills sb
       LEFT JOIN suppliers s ON sb.supplier_id = s.id
       WHERE sb.booking_id = ?
     `).all(id);
-    const receipts = db.prepare(`SELECT * FROM money_in WHERE booking_id = ? ORDER BY receipt_date DESC`).all(id);
-    const payments = db.prepare(`SELECT * FROM money_out WHERE booking_id = ? ORDER BY payment_date DESC`).all(id);
+    const receipts = await db.prepare(`SELECT * FROM money_in WHERE booking_id = ? ORDER BY receipt_date DESC`).all(id);
+    const payments = await db.prepare(`SELECT * FROM money_out WHERE booking_id = ? ORDER BY payment_date DESC`).all(id);
 
     res.json({
       booking,
@@ -278,7 +280,7 @@ app.get('/api/bookings/:id', (req, res) => {
   }
 });
 
-app.post('/api/bookings', (req, res) => {
+app.post('/api/bookings', async (req, res) => {
   try {
     const {
       customerId,
@@ -304,7 +306,7 @@ app.post('/api/bookings', (req, res) => {
     if (!finalCustId && newCustomer && newCustomer.name) {
       // Auto-create new customer and save for next time
       finalCustId = `CUST-${Date.now().toString().slice(-6)}`;
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO customers (id, name, phone, email, city, state, address, gstin, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
@@ -322,10 +324,10 @@ app.post('/api/bookings', (req, res) => {
 
     // If no customer at all, use/create a generic "Walk-in Guest" entry
     if (!finalCustId) {
-      let walkIn = db.prepare(`SELECT id FROM customers WHERE name = 'Walk-in Guest' LIMIT 1`).get();
+      let walkIn = await db.prepare(`SELECT id FROM customers WHERE name = 'Walk-in Guest' LIMIT 1`).get();
       if (!walkIn) {
         const wid = `CUST-WALKIN`;
-        db.prepare(`INSERT OR IGNORE INTO customers (id, name, phone, email, city, notes) VALUES (?, ?, ?, ?, ?, ?)`)
+        await db.prepare(`INSERT INTO customers (id, name, phone, email, city, notes) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`)
           .run(wid, 'Walk-in Guest', '', '', '', 'Default walk-in guest');
         finalCustId = wid;
       } else {
@@ -360,11 +362,11 @@ app.post('/api/bookings', (req, res) => {
     const totalSupplierCost = round2(totalHotelsCost + totalServicesCost);
     const estimatedProfit = round2(baseSelling - totalSupplierCost);
 
-    const bookingId = generateId('TRV', 'bookings');
+    const bookingId = await generateId('TRV', 'bookings');
     const bookingNumber = bookingId;
 
     // Insert booking
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO bookings (
         id, booking_number, customer_id, package_id, destination, start_date, end_date,
         duration_days, duration_nights, pax_adults, pax_children, pax_infants, status,
@@ -379,12 +381,13 @@ app.post('/api/bookings', (req, res) => {
     );
 
     // Insert hotels & check if need to save to hotel master
-    hotels.forEach((h, idx) => {
+    for (let idx = 0; idx < hotels.length; idx++) {
+      const h = hotels[idx];
       let hotelId = h.hotelId;
       // If user checked saveToMaster and no existing hotelId
       if (h.saveToMaster && !hotelId && h.hotelName) {
         hotelId = `HTL-${Date.now().toString().slice(-4)}${idx}`;
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO hotels (id, name, destination, star_rating, address, supplier_id, room_types, base_rate, meal_plans)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
@@ -395,7 +398,7 @@ app.post('/api/bookings', (req, res) => {
       }
 
       const hCost = (Number(h.nights) || 1) * (Number(h.numRooms) || 1) * (Number(h.ratePerNight) || 0);
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO booking_hotels (
           id, booking_id, hotel_id, hotel_name, destination, room_type, num_rooms, meal_plan,
           check_in, check_out, nights, rate_per_night, total_cost, supplier_id, supplier_advance_paid, supplier_payment_due_date, notes
@@ -412,7 +415,7 @@ app.post('/api/bookings', (req, res) => {
         const sBillId = `SBILL-${Date.now().toString().slice(-6)}-${idx}`;
         const adv = Number(h.advancePaid) || 0;
         const bal = round2(hCost - adv);
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO supplier_bills (id, bill_number, supplier_id, booking_id, bill_date, due_date, category, total_amount, paid_amount, balance_due, status, notes)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
@@ -422,8 +425,8 @@ app.post('/api/bookings', (req, res) => {
         );
 
         if (bal > 0) {
-          const sup = db.prepare('SELECT name, phone, email FROM suppliers WHERE id = ?').get(h.supplierId);
-          db.prepare(`
+          const sup = await db.prepare('SELECT name, phone, email FROM suppliers WHERE id = ?').get(h.supplierId);
+          await db.prepare(`
             INSERT INTO payment_reminders (id, reminder_type, party_type, party_id, party_name, party_phone, party_email, booking_id, booking_number, reference_id, amount_due, due_date, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
@@ -433,13 +436,14 @@ app.post('/api/bookings', (req, res) => {
           );
         }
       }
-    });
+    }
 
     // Insert Services
-    services.forEach((s, idx) => {
+    for (let idx = 0; idx < services.length; idx++) {
+      const s = services[idx];
       const sCost = Number(s.costPrice) || 0;
       const sSell = Number(s.sellingPrice) || 0;
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO booking_services (id, booking_id, service_type, description, supplier_id, cost_price, selling_price, payment_due_date, supplier_advance_paid, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
@@ -453,7 +457,7 @@ app.post('/api/bookings', (req, res) => {
         const sBillId = `SBILL-SVC-${Date.now().toString().slice(-6)}-${idx}`;
         const adv = Number(s.advancePaid) || 0;
         const bal = round2(sCost - adv);
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO supplier_bills (id, bill_number, supplier_id, booking_id, bill_date, due_date, category, total_amount, paid_amount, balance_due, status, notes)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
@@ -463,8 +467,8 @@ app.post('/api/bookings', (req, res) => {
         );
 
         if (bal > 0) {
-          const sup = db.prepare('SELECT name, phone, email FROM suppliers WHERE id = ?').get(s.supplierId);
-          db.prepare(`
+          const sup = await db.prepare('SELECT name, phone, email FROM suppliers WHERE id = ?').get(s.supplierId);
+          await db.prepare(`
             INSERT INTO payment_reminders (id, reminder_type, party_type, party_id, party_name, party_phone, party_email, booking_id, booking_number, reference_id, amount_due, due_date, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
@@ -474,11 +478,12 @@ app.post('/api/bookings', (req, res) => {
           );
         }
       }
-    });
+    }
 
     // Insert booking itinerary snapshot
-    itineraryDays.forEach((d, idx) => {
-      db.prepare(`
+    for (let idx = 0; idx < itineraryDays.length; idx++) {
+      const d = itineraryDays[idx];
+      await db.prepare(`
         INSERT INTO booking_itinerary (id, booking_id, day_number, date, title, morning_activity, afternoon_activity, evening_activity, stay_hotel, meals_included)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
@@ -486,12 +491,12 @@ app.post('/api/bookings', (req, res) => {
         d.title || `Day ${idx + 1}`, d.morningActivity || '', d.afternoonActivity || '', d.eveningActivity || '',
         d.stayHotel || '', d.mealsIncluded || ''
       );
-    });
+    }
 
     // Auto-generate Customer Invoice
-    const invoiceId = generateId('INV', 'invoices');
+    const invoiceId = await generateId('INV', 'invoices');
     const invoiceDueDate = calculateEndDate(startDate, Math.max(1, numDays - 2)); // 2 days before trip
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO invoices (
         id, invoice_number, booking_id, customer_id, invoice_date, due_date, subtotal,
         gst_rate, gst_amount, total_amount, paid_amount, balance_amount, status, notes
@@ -503,8 +508,8 @@ app.post('/api/bookings', (req, res) => {
     );
 
     // Auto-create Payment Reminder for customer
-    const cust = db.prepare('SELECT name, phone, email FROM customers WHERE id = ?').get(finalCustId);
-    db.prepare(`
+    const cust = await db.prepare('SELECT name, phone, email FROM customers WHERE id = ?').get(finalCustId);
+    await db.prepare(`
       INSERT INTO payment_reminders (
         id, reminder_type, party_type, party_id, party_name, party_phone, party_email,
         booking_id, booking_number, reference_id, amount_due, due_date, status
@@ -516,7 +521,7 @@ app.post('/api/bookings', (req, res) => {
     );
 
     // Log audit
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO audit_logs (action, entity, entity_id, details)
       VALUES (?, ?, ?, ?)
     `).run('CREATE_BOOKING', 'bookings', bookingId, `Created booking #${bookingNumber} for ${cust?.name} (${grossTotal})`);
@@ -534,11 +539,11 @@ app.post('/api/bookings', (req, res) => {
   }
 });
 
-app.put('/api/bookings/:id/status', (req, res) => {
+app.put('/api/bookings/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    db.prepare('UPDATE bookings SET status = ? WHERE id = ?').run(status, id);
+    await db.prepare('UPDATE bookings SET status = ? WHERE id = ?').run(status, id);
     res.json({ success: true, status });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -548,32 +553,32 @@ app.put('/api/bookings/:id/status', (req, res) => {
 // -------------------------------------------------------------
 // 3. PACKAGES API
 // -------------------------------------------------------------
-app.get('/api/packages', (req, res) => {
+app.get('/api/packages', async (req, res) => {
   try {
-    const packages = db.prepare('SELECT * FROM packages ORDER BY created_at DESC').all();
+    const packages = await db.prepare('SELECT * FROM packages ORDER BY created_at DESC').all();
     res.json(packages.map(p => ({
       ...p,
-      day_wise_itinerary: p.day_wise_itinerary ? JSON.parse(p.day_wise_itinerary) : []
+      day_wise_itinerary: p.day_wise_itinerary ? (typeof p.day_wise_itinerary === 'string' ? JSON.parse(p.day_wise_itinerary) : p.day_wise_itinerary) : []
     })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/packages/:id', (req, res) => {
+app.get('/api/packages/:id', async (req, res) => {
   try {
-    const p = db.prepare('SELECT * FROM packages WHERE id = ?').get(req.params.id);
+    const p = await db.prepare('SELECT * FROM packages WHERE id = ?').get(req.params.id);
     if (!p) return res.status(404).json({ error: 'Package not found' });
     res.json({
       ...p,
-      day_wise_itinerary: p.day_wise_itinerary ? JSON.parse(p.day_wise_itinerary) : []
+      day_wise_itinerary: p.day_wise_itinerary ? (typeof p.day_wise_itinerary === 'string' ? JSON.parse(p.day_wise_itinerary) : p.day_wise_itinerary) : []
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/packages', (req, res) => {
+app.post('/api/packages', async (req, res) => {
   try {
     const {
       name,
@@ -592,8 +597,8 @@ app.post('/api/packages', (req, res) => {
       imageUrl = ''
     } = req.body;
 
-    const pkgId = generateId('PKG', 'packages');
-    db.prepare(`
+    const pkgId = await generateId('PKG', 'packages');
+    await db.prepare(`
       INSERT INTO packages (
         id, name, destination, country, description, duration_days, duration_nights,
         selling_price, estimated_cost, pricing_basis, inclusions, exclusions, cancellation_terms,
@@ -614,7 +619,7 @@ app.post('/api/packages', (req, res) => {
   }
 });
 
-app.put('/api/packages/:id', (req, res) => {
+app.put('/api/packages/:id', async (req, res) => {
   try {
     const {
       name,
@@ -634,7 +639,7 @@ app.put('/api/packages/:id', (req, res) => {
       isActive
     } = req.body;
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE packages SET
         name = ?, destination = ?, country = ?, description = ?, duration_days = ?, duration_nights = ?,
         selling_price = ?, estimated_cost = ?, pricing_basis = ?, inclusions = ?, exclusions = ?,
@@ -655,13 +660,13 @@ app.put('/api/packages/:id', (req, res) => {
   }
 });
 
-app.post('/api/packages/:id/duplicate', (req, res) => {
+app.post('/api/packages/:id/duplicate', async (req, res) => {
   try {
-    const original = db.prepare('SELECT * FROM packages WHERE id = ?').get(req.params.id);
+    const original = await db.prepare('SELECT * FROM packages WHERE id = ?').get(req.params.id);
     if (!original) return res.status(404).json({ error: 'Package not found' });
 
-    const newId = generateId('PKG', 'packages');
-    db.prepare(`
+    const newId = await generateId('PKG', 'packages');
+    await db.prepare(`
       INSERT INTO packages (
         id, name, destination, country, description, duration_days, duration_nights,
         selling_price, estimated_cost, pricing_basis, inclusions, exclusions, cancellation_terms,
@@ -680,9 +685,9 @@ app.post('/api/packages/:id/duplicate', (req, res) => {
   }
 });
 
-app.delete('/api/packages/:id', (req, res) => {
+app.delete('/api/packages/:id', async (req, res) => {
   try {
-    db.prepare('DELETE FROM packages WHERE id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM packages WHERE id = ?').run(req.params.id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -692,9 +697,9 @@ app.delete('/api/packages/:id', (req, res) => {
 // -------------------------------------------------------------
 // 4. HOTELS API
 // -------------------------------------------------------------
-app.get('/api/hotels', (req, res) => {
+app.get('/api/hotels', async (req, res) => {
   try {
-    const hotels = db.prepare(`
+    const hotels = await db.prepare(`
       SELECT h.*, s.name as supplier_name
       FROM hotels h
       LEFT JOIN suppliers s ON h.supplier_id = s.id
@@ -702,19 +707,19 @@ app.get('/api/hotels', (req, res) => {
     `).all();
     res.json(hotels.map(h => ({
       ...h,
-      room_types: h.room_types ? JSON.parse(h.room_types) : [],
-      meal_plans: h.meal_plans ? JSON.parse(h.meal_plans) : []
+      room_types: h.room_types ? (typeof h.room_types === 'string' ? JSON.parse(h.room_types) : h.room_types) : [],
+      meal_plans: h.meal_plans ? (typeof h.meal_plans === 'string' ? JSON.parse(h.meal_plans) : h.meal_plans) : []
     })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/hotels', (req, res) => {
+app.post('/api/hotels', async (req, res) => {
   try {
     const { name, destination, starRating = 3, address = '', supplierId, phone = '', email = '', roomTypes = ['Deluxe'], baseRate = 0, mealPlans = ['CP'], paymentTerms = '', cancellationPolicy = '' } = req.body;
     const hotelId = `HTL-${Date.now().toString().slice(-4)}`;
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO hotels (id, name, destination, star_rating, address, supplier_id, phone, email, room_types, base_rate, meal_plans, payment_terms, cancellation_policy)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
@@ -730,9 +735,9 @@ app.post('/api/hotels', (req, res) => {
 // -------------------------------------------------------------
 // 5. CUSTOMERS & SUPPLIERS
 // -------------------------------------------------------------
-app.get('/api/customers', (req, res) => {
+app.get('/api/customers', async (req, res) => {
   try {
-    const customers = db.prepare(`
+    const customers = await db.prepare(`
       SELECT c.*,
              COUNT(DISTINCT b.id) as total_bookings,
              COALESCE(SUM(inv.total_amount), 0) as total_invoiced,
@@ -749,11 +754,11 @@ app.get('/api/customers', (req, res) => {
   }
 });
 
-app.post('/api/customers', (req, res) => {
+app.post('/api/customers', async (req, res) => {
   try {
     const { name, phone, email = '', city = '', state = '', address = '', gstin = '', emergencyContact = '', notes = '' } = req.body;
     const id = `CUST-${Date.now().toString().slice(-4)}`;
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO customers (id, name, phone, email, city, state, address, gstin, emergency_contact, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, name, phone, email, city, state, address, gstin, emergencyContact, notes);
@@ -763,13 +768,13 @@ app.post('/api/customers', (req, res) => {
   }
 });
 
-app.get('/api/customers/:id/statement', (req, res) => {
+app.get('/api/customers/:id/statement', async (req, res) => {
   try {
     const { id } = req.params;
-    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(id);
-    const bookings = db.prepare('SELECT * FROM bookings WHERE customer_id = ? ORDER BY start_date DESC').all(id);
-    const invoices = db.prepare('SELECT * FROM invoices WHERE customer_id = ? ORDER BY invoice_date DESC').all(id);
-    const receipts = db.prepare('SELECT * FROM money_in WHERE customer_id = ? ORDER BY receipt_date DESC').all(id);
+    const customer = await db.prepare('SELECT * FROM customers WHERE id = ?').get(id);
+    const bookings = await db.prepare('SELECT * FROM bookings WHERE customer_id = ? ORDER BY start_date DESC').all(id);
+    const invoices = await db.prepare('SELECT * FROM invoices WHERE customer_id = ? ORDER BY invoice_date DESC').all(id);
+    const receipts = await db.prepare('SELECT * FROM money_in WHERE customer_id = ? ORDER BY receipt_date DESC').all(id);
 
     res.json({
       customer,
@@ -782,9 +787,9 @@ app.get('/api/customers/:id/statement', (req, res) => {
   }
 });
 
-app.get('/api/suppliers', (req, res) => {
+app.get('/api/suppliers', async (req, res) => {
   try {
-    const suppliers = db.prepare(`
+    const suppliers = await db.prepare(`
       SELECT s.*,
              COALESCE(SUM(sb.total_amount), 0) as total_billed,
              COALESCE(SUM(sb.paid_amount), 0) as total_paid,
@@ -800,11 +805,11 @@ app.get('/api/suppliers', (req, res) => {
   }
 });
 
-app.post('/api/suppliers', (req, res) => {
+app.post('/api/suppliers', async (req, res) => {
   try {
     const { name, category = 'Hotel', contactPerson = '', phone, email = '', city = '', state = '', bankDetails = '', upiId = '', gstin = '', notes = '' } = req.body;
     const id = `SUP-${Date.now().toString().slice(-4)}`;
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO suppliers (id, name, category, contact_person, phone, email, city, state, bank_details, upi_id, gstin, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, name, category, contactPerson, phone, email, city, state, bankDetails, upiId, gstin, notes);
@@ -817,9 +822,9 @@ app.post('/api/suppliers', (req, res) => {
 // -------------------------------------------------------------
 // 6. MONEY IN (CUSTOMER PAYMENTS & ALLOCATIONS)
 // -------------------------------------------------------------
-app.get('/api/money-in', (req, res) => {
+app.get('/api/money-in', async (req, res) => {
   try {
-    const receipts = db.prepare(`
+    const receipts = await db.prepare(`
       SELECT m.*, c.name as customer_name, c.phone as customer_phone,
              b.booking_number, a.account_name
       FROM money_in m
@@ -834,7 +839,7 @@ app.get('/api/money-in', (req, res) => {
   }
 });
 
-app.post('/api/money-in', (req, res) => {
+app.post('/api/money-in', async (req, res) => {
   try {
     const {
       customerId,
@@ -854,10 +859,10 @@ app.post('/api/money-in', (req, res) => {
       return res.status(400).json({ error: 'Valid payment amount is required' });
     }
 
-    const receiptId = generateId('REC', 'money_in');
+    const receiptId = await generateId('REC', 'money_in');
 
     // 1. Insert receipt
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO money_in (id, receipt_number, receipt_date, customer_id, booking_id, invoice_id, receipt_type, amount, payment_mode, account_id, reference_no, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
@@ -866,29 +871,29 @@ app.post('/api/money-in', (req, res) => {
     );
 
     // 2. Increase account liquid balance
-    db.prepare(`
+    await db.prepare(`
       UPDATE accounts SET current_balance = current_balance + ? WHERE id = ?
     `).run(numAmount, accountId);
 
     // 3. Allocate to invoice if invoiceId provided
     if (invoiceId) {
-      const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
+      const inv = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
       if (inv) {
-        const newPaid = round2((inv.paid_amount || 0) + numAmount);
-        const newBal = round2(Math.max(0, (inv.total_amount || 0) - newPaid));
+        const newPaid = round2((Number(inv.paid_amount) || 0) + numAmount);
+        const newBal = round2(Math.max(0, (Number(inv.total_amount) || 0) - newPaid));
         const newStatus = newBal <= 0 ? 'Paid' : newPaid > 0 ? 'Partial' : 'Unpaid';
 
-        db.prepare(`
+        await db.prepare(`
           UPDATE invoices SET paid_amount = ?, balance_amount = ?, status = ? WHERE id = ?
         `).run(newPaid, newBal, newStatus, invoiceId);
 
         // Auto settle or update payment reminder
         if (newBal <= 0) {
-          db.prepare(`
+          await db.prepare(`
             UPDATE payment_reminders SET status = 'Settled' WHERE reference_id = ?
           `).run(invoiceId);
         } else {
-          db.prepare(`
+          await db.prepare(`
             UPDATE payment_reminders SET amount_due = ? WHERE reference_id = ?
           `).run(newBal, invoiceId);
         }
@@ -896,7 +901,7 @@ app.post('/api/money-in', (req, res) => {
     }
 
     // 4. Audit Log
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO audit_logs (action, entity, entity_id, details)
       VALUES (?, ?, ?, ?)
     `).run('RECEIVE_PAYMENT', 'money_in', receiptId, `Received ₹${numAmount} via ${paymentMode} from customer ${customerId}`);
@@ -911,9 +916,9 @@ app.post('/api/money-in', (req, res) => {
 // -------------------------------------------------------------
 // 7. MONEY OUT (SUPPLIER PAYMENTS & ALLOCATIONS)
 // -------------------------------------------------------------
-app.get('/api/money-out', (req, res) => {
+app.get('/api/money-out', async (req, res) => {
   try {
-    const payments = db.prepare(`
+    const payments = await db.prepare(`
       SELECT mo.*, s.name as supplier_name, s.phone as supplier_phone,
              b.booking_number, a.account_name, sb.bill_number
       FROM money_out mo
@@ -929,7 +934,7 @@ app.get('/api/money-out', (req, res) => {
   }
 });
 
-app.post('/api/money-out', (req, res) => {
+app.post('/api/money-out', async (req, res) => {
   try {
     const {
       supplierId,
@@ -949,10 +954,10 @@ app.post('/api/money-out', (req, res) => {
       return res.status(400).json({ error: 'Valid payment amount is required' });
     }
 
-    const paymentId = generateId('PAY', 'money_out');
+    const paymentId = await generateId('PAY', 'money_out');
 
     // 1. Insert payment record
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO money_out (id, payment_number, payment_date, supplier_id, booking_id, bill_id, payment_type, amount, payment_mode, account_id, reference_no, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
@@ -961,29 +966,29 @@ app.post('/api/money-out', (req, res) => {
     );
 
     // 2. Deduct from account balance
-    db.prepare(`
+    await db.prepare(`
       UPDATE accounts SET current_balance = current_balance - ? WHERE id = ?
     `).run(numAmount, accountId);
 
     // 3. Allocate to supplier bill
     if (billId) {
-      const bill = db.prepare('SELECT * FROM supplier_bills WHERE id = ?').get(billId);
+      const bill = await db.prepare('SELECT * FROM supplier_bills WHERE id = ?').get(billId);
       if (bill) {
-        const newPaid = round2((bill.paid_amount || 0) + numAmount);
-        const newBal = round2(Math.max(0, (bill.total_amount || 0) - newPaid));
+        const newPaid = round2((Number(bill.paid_amount) || 0) + numAmount);
+        const newBal = round2(Math.max(0, (Number(bill.total_amount) || 0) - newPaid));
         const newStatus = newBal <= 0 ? 'Paid' : newPaid > 0 ? 'Partial' : 'Unpaid';
 
-        db.prepare(`
+        await db.prepare(`
           UPDATE supplier_bills SET paid_amount = ?, balance_due = ?, status = ? WHERE id = ?
         `).run(newPaid, newBal, newStatus, billId);
 
         // Auto settle or update reminder
         if (newBal <= 0) {
-          db.prepare(`
+          await db.prepare(`
             UPDATE payment_reminders SET status = 'Settled' WHERE reference_id = ?
           `).run(billId);
         } else {
-          db.prepare(`
+          await db.prepare(`
             UPDATE payment_reminders SET amount_due = ? WHERE reference_id = ?
           `).run(newBal, billId);
         }
@@ -991,7 +996,7 @@ app.post('/api/money-out', (req, res) => {
     }
 
     // 4. Audit Log
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO audit_logs (action, entity, entity_id, details)
       VALUES (?, ?, ?, ?)
     `).run('SUPPLIER_PAYMENT', 'money_out', paymentId, `Paid ₹${numAmount} via ${paymentMode} to supplier ${supplierId}`);
@@ -1006,16 +1011,16 @@ app.post('/api/money-out', (req, res) => {
 // -------------------------------------------------------------
 // 8. EXPENSES API
 // -------------------------------------------------------------
-app.get('/api/expenses', (req, res) => {
+app.get('/api/expenses', async (req, res) => {
   try {
-    const expenses = db.prepare(`
+    const expenses = await db.prepare(`
       SELECT e.*, a.account_name
       FROM expenses e
       LEFT JOIN accounts a ON e.account_id = a.id
       ORDER BY e.expense_date DESC, e.created_at DESC
     `).all();
 
-    const categorySummary = db.prepare(`
+    const categorySummary = await db.prepare(`
       SELECT category, SUM(amount) as total
       FROM expenses
       GROUP BY category
@@ -1028,7 +1033,7 @@ app.get('/api/expenses', (req, res) => {
   }
 });
 
-app.post('/api/expenses', (req, res) => {
+app.post('/api/expenses', async (req, res) => {
   try {
     const {
       expenseDate = new Date().toISOString().split('T')[0],
@@ -1047,9 +1052,9 @@ app.post('/api/expenses', (req, res) => {
       return res.status(400).json({ error: 'Valid expense amount is required' });
     }
 
-    const expenseId = generateId('EXP', 'expenses');
+    const expenseId = await generateId('EXP', 'expenses');
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO expenses (id, expense_number, expense_date, category, amount, payment_mode, account_id, vendor_name, reference_no, tax_deductible, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
@@ -1058,10 +1063,10 @@ app.post('/api/expenses', (req, res) => {
     );
 
     // Deduct from bank/cash account
-    db.prepare('UPDATE accounts SET current_balance = current_balance - ? WHERE id = ?').run(numAmount, accountId);
+    await db.prepare('UPDATE accounts SET current_balance = current_balance - ? WHERE id = ?').run(numAmount, accountId);
 
     // Audit log
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO audit_logs (action, entity, entity_id, details)
       VALUES (?, ?, ?, ?)
     `).run('ADD_EXPENSE', 'expenses', expenseId, `Recorded expense ₹${numAmount} under ${category}`);
@@ -1075,7 +1080,7 @@ app.post('/api/expenses', (req, res) => {
 // -------------------------------------------------------------
 // 9. REMINDERS & AUTOMATION
 // -------------------------------------------------------------
-app.get('/api/reminders', (req, res) => {
+app.get('/api/reminders', async (req, res) => {
   try {
     const { status } = req.query;
     let query = 'SELECT * FROM payment_reminders';
@@ -1085,9 +1090,9 @@ app.get('/api/reminders', (req, res) => {
       params.push(status);
     }
     query += ' ORDER BY due_date ASC';
-    const reminders = db.prepare(query).all(...params);
+    const reminders = await db.prepare(query).all(...params);
 
-    const settings = db.prepare('SELECT * FROM company_settings WHERE id = 1').get() || {};
+    const settings = (await db.prepare('SELECT * FROM company_settings WHERE id = 1').get()) || {};
 
     // Generate WhatsApp and Email prefilled links for each reminder
     const enriched = reminders.map(r => {
@@ -1124,11 +1129,11 @@ app.get('/api/reminders', (req, res) => {
   }
 });
 
-app.post('/api/reminders/:id/status', (req, res) => {
+app.post('/api/reminders/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
     const { status, sentVia } = req.body;
-    db.prepare(`
+    await db.prepare(`
       UPDATE payment_reminders 
       SET status = ?, sent_via = COALESCE(?, sent_via), sent_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -1142,53 +1147,53 @@ app.post('/api/reminders/:id/status', (req, res) => {
 // -------------------------------------------------------------
 // 10. FINANCIAL REPORTS & ANALYTICS
 // -------------------------------------------------------------
-app.get('/api/reports', (req, res) => {
+app.get('/api/reports', async (req, res) => {
   try {
     const { type = 'pnl', startDate, endDate } = req.query;
 
     if (type === 'pnl') {
       // Profit & Loss
-      const rev = db.prepare(`
+      const rev = await db.prepare(`
         SELECT COALESCE(SUM(total_amount), 0) as total_sales,
                COALESCE(SUM(subtotal), 0) as net_sales,
                COALESCE(SUM(gst_amount), 0) as gst_collected
         FROM invoices WHERE status != 'Cancelled'
       `).get();
 
-      const cost = db.prepare(`
+      const cost = await db.prepare(`
         SELECT COALESCE(SUM(total_amount), 0) as direct_supplier_costs
         FROM supplier_bills
       `).get();
 
-      const exp = db.prepare(`
+      const exp = await db.prepare(`
         SELECT COALESCE(SUM(amount), 0) as operating_expenses
         FROM expenses
       `).get();
 
-      const expByCategory = db.prepare(`
+      const expByCategory = await db.prepare(`
         SELECT category, SUM(amount) as amount FROM expenses GROUP BY category ORDER BY amount DESC
       `).all();
 
-      const grossProfit = round2(rev.net_sales - cost.direct_supplier_costs);
-      const netProfit = round2(grossProfit - exp.operating_expenses);
+      const grossProfit = round2(Number(rev.net_sales) - Number(cost.direct_supplier_costs));
+      const netProfit = round2(grossProfit - Number(exp.operating_expenses));
 
       return res.json({
-        totalRevenue: rev.net_sales,
-        gstCollected: rev.gst_collected,
-        totalSalesGross: rev.total_sales,
-        directSupplierCosts: cost.direct_supplier_costs,
+        totalRevenue: Number(rev.net_sales),
+        gstCollected: Number(rev.gst_collected),
+        totalSalesGross: Number(rev.total_sales),
+        directSupplierCosts: Number(cost.direct_supplier_costs),
         grossProfit,
-        grossProfitMargin: rev.net_sales > 0 ? round2((grossProfit / rev.net_sales) * 100) : 0,
-        operatingExpenses: exp.operating_expenses,
+        grossProfitMargin: Number(rev.net_sales) > 0 ? round2((grossProfit / Number(rev.net_sales)) * 100) : 0,
+        operatingExpenses: Number(exp.operating_expenses),
         netProfit,
-        netProfitMargin: rev.net_sales > 0 ? round2((netProfit / rev.net_sales) * 100) : 0,
+        netProfitMargin: Number(rev.net_sales) > 0 ? round2((netProfit / Number(rev.net_sales)) * 100) : 0,
         expenseBreakdown: expByCategory
       });
     }
 
     if (type === 'ageing') {
       // Customer Outstanding Ageing (0-30, 31-60, 61-90, 90+)
-      const invoices = db.prepare(`
+      const invoices = await db.prepare(`
         SELECT inv.*, c.name as customer_name, c.phone as customer_phone, b.destination
         FROM invoices inv
         JOIN customers c ON inv.customer_id = c.id
@@ -1226,12 +1231,12 @@ app.get('/api/reports', (req, res) => {
 
       return res.json({
         summary: {
-          currentTotal: round2(buckets.current.reduce((s, i) => s + i.balance_amount, 0)),
-          days0_30Total: round2(buckets.days0_30.reduce((s, i) => s + i.balance_amount, 0)),
-          days31_60Total: round2(buckets.days31_60.reduce((s, i) => s + i.balance_amount, 0)),
-          days61_90Total: round2(buckets.days61_90.reduce((s, i) => s + i.balance_amount, 0)),
-          days90PlusTotal: round2(buckets.days90Plus.reduce((s, i) => s + i.balance_amount, 0)),
-          grandTotal: round2(invoices.reduce((s, i) => s + i.balance_amount, 0))
+          currentTotal: round2(buckets.current.reduce((s, i) => s + (Number(i.balance_amount) || 0), 0)),
+          days0_30Total: round2(buckets.days0_30.reduce((s, i) => s + (Number(i.balance_amount) || 0), 0)),
+          days31_60Total: round2(buckets.days31_60.reduce((s, i) => s + (Number(i.balance_amount) || 0), 0)),
+          days61_90Total: round2(buckets.days61_90.reduce((s, i) => s + (Number(i.balance_amount) || 0), 0)),
+          days90PlusTotal: round2(buckets.days90Plus.reduce((s, i) => s + (Number(i.balance_amount) || 0), 0)),
+          grandTotal: round2(invoices.reduce((s, i) => s + (Number(i.balance_amount) || 0), 0))
         },
         buckets
       });
@@ -1239,12 +1244,12 @@ app.get('/api/reports', (req, res) => {
 
     if (type === 'profitability') {
       // Booking-wise Estimated vs Final Profitability
-      const list = db.prepare(`
+      const list = await db.prepare(`
         SELECT b.id, b.booking_number, b.destination, b.start_date, b.end_date, b.status,
                c.name as customer_name,
                b.selling_price, b.total_supplier_cost, b.estimated_profit, b.final_profit,
                (b.selling_price - b.total_supplier_cost) as calculated_margin,
-               ROUND(((b.selling_price - b.total_supplier_cost) / NULLIF(b.selling_price, 0)) * 100, 1) as margin_percentage
+               ROUND(CAST(((b.selling_price - b.total_supplier_cost) / NULLIF(b.selling_price, 0)) * 100 AS numeric), 1) as margin_percentage
         FROM bookings b
         JOIN customers c ON b.customer_id = c.id
         WHERE b.status != 'Cancelled'
@@ -1256,21 +1261,21 @@ app.get('/api/reports', (req, res) => {
 
     if (type === 'cashbook') {
       // Cash & Bank Book
-      const moneyIn = db.prepare(`
+      const moneyIn = await db.prepare(`
         SELECT receipt_date as tx_date, 'Money In' as type, receipt_number as ref, 
                amount as debit, 0 as credit, payment_mode, a.account_name, notes
         FROM money_in m
         JOIN accounts a ON m.account_id = a.id
       `).all();
 
-      const moneyOut = db.prepare(`
+      const moneyOut = await db.prepare(`
         SELECT payment_date as tx_date, 'Money Out' as type, payment_number as ref, 
                0 as debit, amount as credit, payment_mode, a.account_name, notes
         FROM money_out mo
         JOIN accounts a ON mo.account_id = a.id
       `).all();
 
-      const expenses = db.prepare(`
+      const expenses = await db.prepare(`
         SELECT expense_date as tx_date, 'Expense' as type, expense_number as ref, 
                0 as debit, amount as credit, payment_mode, a.account_name, category || ' - ' || notes as notes
         FROM expenses e
@@ -1305,16 +1310,16 @@ app.post('/api/ai/generate-itinerary', async (req, res) => {
 // -------------------------------------------------------------
 // 12. SETTINGS API
 // -------------------------------------------------------------
-app.get('/api/settings', (req, res) => {
+app.get('/api/settings', async (req, res) => {
   try {
-    const settings = db.prepare('SELECT * FROM company_settings WHERE id = 1').get();
+    const settings = await db.prepare('SELECT * FROM company_settings WHERE id = 1').get();
     res.json(settings);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/settings', (req, res) => {
+app.post('/api/settings', async (req, res) => {
   try {
     const fields = req.body;
     const keys = Object.keys(fields);
@@ -1324,7 +1329,7 @@ app.post('/api/settings', (req, res) => {
     const values = keys.map(k => fields[k]);
     values.push(1); // id = 1
 
-    db.prepare(`UPDATE company_settings SET ${setClauses} WHERE id = ?`).run(...values);
+    await db.prepare(`UPDATE company_settings SET ${setClauses} WHERE id = ?`).run(...values);
     res.json({ success: true, message: 'Settings saved successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1334,18 +1339,18 @@ app.post('/api/settings', (req, res) => {
 // -------------------------------------------------------------
 // 13. ACCOUNTS API
 // -------------------------------------------------------------
-app.get('/api/accounts', (req, res) => {
+app.get('/api/accounts', async (req, res) => {
   try {
-    const accounts = db.prepare('SELECT * FROM accounts').all();
+    const accounts = await db.prepare('SELECT * FROM accounts').all();
     res.json(accounts);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/invoices', (req, res) => {
+app.get('/api/invoices', async (req, res) => {
   try {
-    const invoices = db.prepare(`
+    const invoices = await db.prepare(`
       SELECT inv.*, c.name as customer_name, c.phone as customer_phone, b.booking_number, b.destination
       FROM invoices inv
       JOIN customers c ON inv.customer_id = c.id
@@ -1358,9 +1363,9 @@ app.get('/api/invoices', (req, res) => {
   }
 });
 
-app.get('/api/supplier-bills', (req, res) => {
+app.get('/api/supplier-bills', async (req, res) => {
   try {
-    const bills = db.prepare(`
+    const bills = await db.prepare(`
       SELECT sb.*, s.name as supplier_name, s.phone as supplier_phone, b.booking_number
       FROM supplier_bills sb
       JOIN suppliers s ON sb.supplier_id = s.id

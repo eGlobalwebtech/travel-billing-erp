@@ -12,7 +12,7 @@ export async function generateAItinerary({
   hotelCategory = '4-Star',
   specialRequests = ''
 }) {
-  const settings = db.prepare('SELECT * FROM company_settings WHERE id = 1').get() || {};
+  const settings = (await db.prepare('SELECT * FROM company_settings WHERE id = 1').get()) || {};
   const apiKey = process.env.GEMINI_API_KEY || settings.ai_api_key || '';
 
   // Calculate duration nights
