@@ -341,3 +341,4 @@ CREATE INDEX IF NOT EXISTS idx_money_in_booking_id ON money_in(booking_id);
 CREATE INDEX IF NOT EXISTS idx_money_out_booking_id ON money_out(booking_id);
 CREATE INDEX IF NOT EXISTS idx_supplier_bills_supplier_id ON supplier_bills(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_reminders_status_due ON payment_reminders(status, due_date);
+

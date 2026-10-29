@@ -90,3 +90,4 @@ INSERT INTO expenses (id, expense_number, expense_date, category, amount, paymen
 ('EXP-2026-004', 'EXP-2026-004', '2026-10-12', 'Marketing & Ads', 12500.00, 'Bank Transfer', 'ACC-02', 'Google & Meta Travel Ads', 'CARD-AD-8899', 1, 'Diwali vacation campaign ads'),
 ('EXP-2026-005', 'EXP-2026-005', '2026-10-14', 'Office Tea & Misc', 1850.00, 'Cash', 'ACC-01', 'Local Market & Pantry Vendor', 'CASH-VOUCHER-01', 1, 'Client refreshments, tea & snacks')
 ON CONFLICT (id) DO NOTHING;
+

@@ -50,3 +50,4 @@ $env:PGPASSWORD="your_password"
 & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -h localhost -p 5500 -U postgres -d travel_billing_erp -f database/schema.sql
 & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -h localhost -p 5500 -U postgres -d travel_billing_erp -f database/seed.sql
 ```
+
