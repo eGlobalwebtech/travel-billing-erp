@@ -5,6 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "start": "node server/index.js",
+    "build": "npm --prefix client install && npm --prefix client run build",
     "server": "node server/index.js",
     "client": "npm.cmd --prefix client run dev",
     "dev": "concurrently -k -p \"[{name}]\" -n \"SERVER,CLIENT\" -c \"cyan.bold,green.bold\" \"node server/index.js\" \"npm.cmd --prefix client run dev\""

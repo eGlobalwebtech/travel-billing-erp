@@ -13,13 +13,20 @@ const __dirname = path.dirname(__filename);
 pg.types.setTypeParser(1700, (val) => (val === null ? null : parseFloat(val)));
 pg.types.setTypeParser(20, (val) => (val === null ? null : parseInt(val, 10)));
 
-export const pool = new pg.Pool({
-  host: process.env.PGHOST || 'localhost',
-  port: parseInt(process.env.PGPORT || '5432', 10),
-  database: process.env.PGDATABASE || 'travel_billing_erp',
-  user: process.env.PGUSER || 'postgres',
-  password: process.env.PGPASSWORD,
-});
+const poolConfig = process.env.DATABASE_URL
+  ? {
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }
+    }
+  : {
+      host: process.env.PGHOST || 'localhost',
+      port: parseInt(process.env.PGPORT || '5432', 10),
+      database: process.env.PGDATABASE || 'travel_billing_erp',
+      user: process.env.PGUSER || 'postgres',
+      password: process.env.PGPASSWORD,
+    };
+
+export const pool = new pg.Pool(poolConfig);
 
 // Convert SQLite '?' parameter placeholders to PostgreSQL '$1, $2, $3...'
 export function formatSql(sql) {
